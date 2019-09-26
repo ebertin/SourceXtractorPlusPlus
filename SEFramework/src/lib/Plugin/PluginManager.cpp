@@ -58,15 +58,18 @@ static std::vector<boost::filesystem::path> getPluginPaths(
         full_path += boost::dll::shared_library::suffix();
 
         if (boost::filesystem::exists(full_path)) {
-          logger.info() << "Loading plugin from file: " << full_path;
+          logger.error() << "Loading plugin from file: " << full_path;
           plugin_paths.emplace_back(full_path);
         } else {
-          logger.warn() << "Failed to load plugins from " << full_path << " - file not found";
+          logger.error() << "Failed to load plugins from " << full_path << " - file not found";
         }
       }
     } else {
-      logger.warn() << "The " << plugin_path << " is not a directory. No plugins will be loaded";
+      logger.error() << "The " << plugin_path << " is not a directory. No plugins will be loaded";
     }
+  }
+  else{
+	  logger.error() << "Empty plugin path";
   }
 
   return plugin_paths;
@@ -76,10 +79,13 @@ static std::vector<boost::filesystem::path> getPluginPaths(
 void PluginManager::loadPlugins() {
   // load staticly registered plugins
   for (auto& static_plugin : s_static_plugins) {
-    static_plugin->registerPlugin(*this);
+	  auto id_string = static_plugin->getIdString();
+	  logger.error() << "Registering static plugin" << id_string;
+	  static_plugin->registerPlugin(*this);
   }
 
 #if USE_BOOST_DLL
+  logger.error() << "In the loop....";
   // load dynamic plugins
   auto plugin_paths = getPluginPaths(m_plugin_path, m_plugin_list);
   for (auto& plugin_path : plugin_paths) {
@@ -91,13 +97,15 @@ void PluginManager::loadPlugins() {
 
     auto plugin = creator();
     auto id_string = plugin->getIdString();
-    logger.info() << "Registering plugin " << id_string;
+    logger.error() << "Registering runtime plugin " << id_string;
 
     plugin->registerPlugin(*this);
 
     // keep the library loaded while PluginManager still exists
     m_loaded_plugins.push_back(lib);
   }
+#else
+  logger.error() << "No USE_BOOST_DLL defined";
 #endif
 }
 

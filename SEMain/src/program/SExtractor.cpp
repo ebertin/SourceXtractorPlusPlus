@@ -162,7 +162,7 @@ public:
     config_manager.registerConfiguration<MemoryConfig>();
 
     CheckImages::getInstance().reportConfigDependencies(config_manager);
-
+logger.error() << "normal path";
     //plugins need to be registered before reportConfigDependencies()
     plugin_manager.loadPlugins();
     task_factory_registry->reportConfigDependencies(config_manager);
@@ -391,20 +391,24 @@ public:
   virtual ~PluginOptionsMain() = default;
 
   boost::program_options::options_description defineSpecificProgramOptions() override {
+	  logger.error() << "In defineSpecific...." << m_plugin_path;
     auto& config_manager = ConfigManager::getInstance(conf_man_id);
     config_manager.registerConfiguration<PluginConfig>();
     auto options = config_manager.closeRegistration();
     // The following will consume any extra options in the configuration file
     options.add_options()("*", po::value<std::vector<std::string>>());
+	  logger.error() << "out defineSpecific...." << m_plugin_path;
     return options;
   }
   
   Elements::ExitCode mainMethod(std::map<std::string, boost::program_options::variable_value>& args) override {
+	  logger.error() << "In mainMethod...." << m_plugin_path;
     auto& config_manager = ConfigManager::getInstance(conf_man_id);
     config_manager.initialize(args);
     auto& conf = config_manager.getConfiguration<PluginConfig>();
     m_plugin_path = conf.getPluginPath();
     m_plugin_list = conf.getPluginList();
+    logger.error() << "path...." << m_plugin_path;
     return Elements::ExitCode::OK;
   }
 
@@ -477,10 +481,11 @@ ELEMENTS_API int main(int argc, char* argv[]) {
       auto& option_str = plugin_options_input[i];
       argv_tmp[i] = option_str.data();
     }
-
+logger.error() << "Plugin_path before: " << plugin_path;
     CREATE_MANAGER_WITH_ARGS(plugin_options_program, PluginOptionsMain, plugin_path, plugin_list);
     plugin_options_program.run(argc_tmp, const_cast<char **>(argv_tmp.data()));
 
+    logger.error() << "Plugin_path after: " << plugin_path;
     CREATE_MANAGER_WITH_ARGS(main, SEMain, plugin_path, plugin_list);
     Elements::ExitCode exit_code = main.run(argc, argv);
     return static_cast<Elements::ExitCodeType>(exit_code);
