@@ -79,6 +79,9 @@
 
 #include "SEImplementation/CheckImages/CheckImages.h"
 
+#include "SEImplementation/Bypass/StoreBypass.h"
+#include "SEImplementation/Bypass/RecoverBypass.h"
+
 #include "SEMain/ProgressReporterFactory.h"
 #include "SEMain/PluginConfig.h"
 #include "SEMain/Sorter.h"
@@ -95,6 +98,8 @@ static const std::string LIST_OUTPUT_PROPERTIES {"list-output-properties"};
 static const std::string PROPERTY_COLUMN_MAPPING_ALL {"property-column-mapping-all"};
 static const std::string PROPERTY_COLUMN_MAPPING {"property-column-mapping"};
 static const std::string DUMP_CONFIG {"dump-default-config"};
+static const std::string BYPASS_OUTFILE {"bypass-out"};
+static const std::string BYPASS_INFILE {"bypass-in"};
 
 static Elements::Logging logger = Elements::Logging::getLogger("SourceXtractor");
 
@@ -181,7 +186,13 @@ public:
     options.add_options() (PROPERTY_COLUMN_MAPPING.c_str(), po::bool_switch(),
           "Show the columns created for each property, for the given configuration");
     options.add_options() (DUMP_CONFIG.c_str(), po::bool_switch(),
-                           "Dump parameters with default values into a configuration file");
+          "Dump parameters with default values into a configuration file");
+
+    options.add_options() (BYPASS_OUTFILE.c_str(), po::value<std::string>(),
+          "Generate a bypass file");
+    options.add_options() (BYPASS_INFILE.c_str(), po::value<std::string>(),
+          "Read a bypass file, skipping segmentation to deblending");
+
     progress_printer_factory.addOptions(options);
 
     // Allow to pass Python options as positional following --
@@ -317,35 +328,57 @@ public:
     auto detection_image_gain = config_manager.getConfiguration<DetectionImageConfig>().getGain();
     auto detection_image_saturation = config_manager.getConfiguration<DetectionImageConfig>().getSaturation();
 
-    auto segmentation = segmentation_factory.createSegmentation();
-    auto partition = partition_factory.getPartition();
-    auto source_grouping = grouping_factory.createGrouping();
+    // Link together the pipeline's steps
+    auto sorter = std::make_shared<Sorter>();
+    std::shared_ptr<Segmentation> segmentation;
+    std::shared_ptr<Deblending> deblending;
 
-    std::shared_ptr<Deblending> deblending = deblending_factory.createDeblending();
+    if (args.count(BYPASS_INFILE)) {
+      auto segmentation_config = config_manager.getConfiguration<SegmentationConfig>();
+      auto m_filter = segmentation_config.getFilter();
+      auto bypass_in = args.at(BYPASS_INFILE).as<std::string>();
+      auto bypass_recover = std::make_shared<RecoverBypass>(bypass_in, m_filter, source_factory,
+                                                            group_factory);
+      deblending = bypass_recover;
+      segmentation = bypass_recover;
+    }
+    else {
+      segmentation = segmentation_factory.createSegmentation();
+      auto partition = partition_factory.getPartition();
+      auto source_grouping = grouping_factory.createGrouping();
+      deblending = deblending_factory.createDeblending();
+
+      segmentation->Observable<std::shared_ptr<SourceInterface>>::addObserver(partition);
+      segmentation->Observable<ProcessSourcesEvent>::addObserver(source_grouping);
+      partition->addObserver(source_grouping);
+      source_grouping->addObserver(deblending);
+
+      // Bypass output
+      if (args.count(BYPASS_OUTFILE)) {
+        auto bypass_out = args.at(BYPASS_OUTFILE).as<std::string>();
+        deblending->addObserver(std::make_shared<StoreBypass>(bypass_out));
+      }
+
+      if (CheckImages::getInstance().getSegmentationImage() != nullptr) {
+        segmentation->Observable<std::shared_ptr<SourceInterface>>::addObserver(
+          std::make_shared<DetectionIdCheckImage>());
+      }
+    }
+
     std::shared_ptr<Measurement> measurement = measurement_factory.getMeasurement();
     std::shared_ptr<Output> output = output_factory.getOutput();
 
-    auto sorter = std::make_shared<Sorter>();
-
-    // Link together the pipeline's steps
-    segmentation->Observable<std::shared_ptr<SourceInterface>>::addObserver(partition);
-    segmentation->Observable<ProcessSourcesEvent>::addObserver(source_grouping);
-    partition->addObserver(source_grouping);
-    source_grouping->addObserver(deblending);
     deblending->addObserver(measurement);
     measurement->addObserver(sorter);
     sorter->addObserver(output);
+    measurement->addObserver(progress_mediator->getMeasurementObserver());
 
+    // Progress
     segmentation->Observable<SegmentationProgress>::addObserver(progress_mediator->getSegmentationObserver());
     segmentation->Observable<std::shared_ptr<SourceInterface>>::addObserver(progress_mediator->getDetectionObserver());
     deblending->addObserver(progress_mediator->getDeblendingObserver());
-    measurement->addObserver(progress_mediator->getMeasurementObserver());
 
     // Add observers for CheckImages
-    if (CheckImages::getInstance().getSegmentationImage() != nullptr) {
-      segmentation->Observable<std::shared_ptr<SourceInterface>>::addObserver(
-          std::make_shared<DetectionIdCheckImage>());
-    }
     if (CheckImages::getInstance().getPartitionImage() != nullptr) {
       measurement->addObserver(
           std::make_shared<SourceIdCheckImage>());

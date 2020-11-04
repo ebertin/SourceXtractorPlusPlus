@@ -277,6 +277,8 @@ std::vector<std::shared_ptr<SourceInterface>> MultiThresholdPartitionStep::reass
     amplitudes.push_back(amp);
   }
 
+  srand(0);
+
   for (auto pixel : pixel_coords) {
     if (image->getValue(pixel - offset) > 0) {
       SeFloat cumulated_probability = 0;

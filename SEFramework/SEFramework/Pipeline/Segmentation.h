@@ -78,7 +78,7 @@ public:
   }
 
   /// Processes a Frame notifying Observers with a Source object for each detection
-  void processFrame(std::shared_ptr<DetectionImageFrame> frame) const;
+  virtual void processFrame(std::shared_ptr<DetectionImageFrame> frame) const;
 
 protected:
   void publishSource(std::shared_ptr<SourceInterface> source) const {
