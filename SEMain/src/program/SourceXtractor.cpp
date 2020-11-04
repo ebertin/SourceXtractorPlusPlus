@@ -96,24 +96,6 @@ static const std::string PROPERTY_COLUMN_MAPPING_ALL {"property-column-mapping-a
 static const std::string PROPERTY_COLUMN_MAPPING {"property-column-mapping"};
 static const std::string DUMP_CONFIG {"dump-default-config"};
 
-class GroupObserver : public Observer<std::shared_ptr<SourceGroupInterface>> {
-public:
-  virtual void handleMessage(const std::shared_ptr<SourceGroupInterface>& group) override {
-      m_list.push_back(group);
-  }
-
-  std::list<std::shared_ptr<SourceGroupInterface>> m_list;
-};
-
-class SourceObserver : public Observer<std::shared_ptr<SourceWithOnDemandProperties>> {
-public:
-  virtual void handleMessage(const std::shared_ptr<SourceWithOnDemandProperties>& source) override {
-      m_list.push_back(source);
-  }
-
-  std::list<std::shared_ptr<SourceWithOnDemandProperties>> m_list;
-};
-
 static Elements::Logging logger = Elements::Logging::getLogger("SourceXtractor");
 
 static void setupEnvironment(void) {
